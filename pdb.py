@@ -57,9 +57,7 @@ class DefaultConfig:
     truncate_long_lines = True
     exec_if_unfocused = None
     disable_pytest_capturing = True
-    encodings = ('utf-8', 'latin-1')
-    enable_hidden_frames = True
-    show_hidden_frames_count = True
+    encoding = 'utf-8'
 
     line_number_color = Color.turquoise
     filename_color = Color.yellow
@@ -77,22 +75,7 @@ def setbgcolor(line, color):
     import re
     setbg = '\x1b[%dm' % color
     regexbg = '\\1;%dm' % color
-    result = setbg + re.sub('(\x1b\\[.*?)m', regexbg, line) + '\x1b[00m'
-    if os.environ.get('TERM') == 'eterm-color':
-        # it seems that emacs' terminal has problems with some ANSI escape
-        # sequences. Eg, 'ESC[44m' sets the background color in all terminals
-        # I tried, but not in emacs. To set the background color, it needs to
-        # have also an explicit foreground color, e.g. 'ESC[37;44m'. These
-        # three lines are a hack, they try to add a foreground color to all
-        # escape sequences wich are not recognized by emacs. However, we need
-        # to pick one specific fg color: I choose white (==37), but you might
-        # want to change it.  These lines seems to work fine with the ANSI
-        # codes produced by pygments, but they are surely not a general
-        # solution.
-        result = result.replace(setbg, '\x1b[37;%dm' % color)
-        result = result.replace('\x1b[00;%dm' % color, '\x1b[37;%dm' % color)
-        result = result.replace('\x1b[39;49;00;', '\x1b[37;')
-    return result
+    return setbg + re.sub('(\x1b\\[.*?)m', regexbg, line) + '\x1b[00m'
 
 CLEARSCREEN = '\033[2J\033[1;1H'
 
@@ -168,7 +151,7 @@ class Pdb(pdb.Pdb, ConfigurableClass):
 
     def print_hidden_frames_count(self):
         n = len(self.hidden_frames)
-        if n and self.config.show_hidden_frames_count:
+        if n:
             plural = n>1 and 's' or ''
             print >> self.stdout, \
                 "   %d frame%s hidden (try 'help hidden_frames')" % (n, plural)
@@ -194,8 +177,6 @@ class Pdb(pdb.Pdb, ConfigurableClass):
             tb = tb.tb_next
 
     def _is_hidden(self, frame):
-        if not self.config.enable_hidden_frames:
-            return False
         consts = frame.f_code.co_consts
         if consts and consts[-1] is _HIDE_FRAME:
             return True
@@ -271,7 +252,6 @@ class Pdb(pdb.Pdb, ConfigurableClass):
     #
     def format_stack_entry(self, frame_lineno, lprefix=': '):
         entry = pdb.Pdb.format_stack_entry(self, frame_lineno, lprefix)
-        entry = self.try_to_decode(entry)
         if self.config.highlight:
             match = self.stack_entry_regexp.match(entry)
             if match:
@@ -281,19 +261,11 @@ class Pdb(pdb.Pdb, ConfigurableClass):
                 entry = '%s(%s)%s' % (filename, lineno, other)
         return entry
 
-    def try_to_decode(self, s):
-        for encoding in self.config.encodings:
-            try:
-                return s.decode(encoding)
-            except UnicodeDecodeError:
-                pass
-        return s
-
     def format_source(self, src):
         if not self._init_pygments():
             return src
         from pygments import highlight
-        src = self.try_to_decode(src)
+        src = src.decode(self.config.encoding)
         return highlight(src, self._lexer, self._fmt)
 
     def format_line(self, lineno, marker, line):
@@ -392,11 +364,7 @@ Frames can marked as hidden in the following ways:
                 lines, _ = inspect.findsource(self.curframe)
                 lineno = 1
             else:
-                try:
-                    lines, lineno = inspect.getsourcelines(self.curframe)
-                except Exception, e:
-                    print >> self.stdout, '** Error in inspect.getsourcelines: %s **' % e
-                    return
+                lines, lineno = inspect.getsourcelines(self.curframe)
         except IOError, e:
             print >> self.stdout, '** Error: %s **' % e
             return
@@ -771,11 +739,7 @@ for name in 'run runeval runctx runcall pm main'.split():
     globals()[name] = rebind_globals(func)
 del name, func
 
-def post_mortem(t=None, Pdb=Pdb):
-    if t is None:
-      t = sys.exc_info()[2]
-      assert t is not None, "post_mortem outside of exception context"
-
+def post_mortem(t, Pdb=Pdb):
     p = Pdb()
     p.reset()
     p.interaction(None, t)

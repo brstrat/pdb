@@ -367,26 +367,6 @@ NUM  ->             xpm()
 # c
 """)
 
-
-def test_postmortem_noargs():
-
-    def fn():
-        try:
-            a = 1
-            1/0
-        except ZeroDivisionError:
-            pdb.post_mortem(Pdb=PdbTest)
-
-    check(fn, """
-> .*fn()
--> 1/0
-# c
-""")
-
-def test_postmortem_needs_exceptioncontext():
-    sys.exc_clear() # py.test bug - doesnt clear the index error from finding the next item
-    py.test.raises(AssertionError, pdb.post_mortem, Pdb=PdbTest)
-
 def test_exception_through_generator():
     def gen():
         yield 5
@@ -775,44 +755,6 @@ def test_hidden_unittest_frames():
 # c
     """)
 
-def test_dont_show_hidden_frames_count():
-    class MyConfig(ConfigTest):
-        show_hidden_frames_count = False
-
-    @pdb.hideframe
-    def g():
-        set_trace(Config=MyConfig)
-        return 'foo'
-    def fn():
-        g()
-        return 1
-
-    check(fn, """
-> .*fn()
--> g()
-# c           # note that the hidden frame count is not displayed
-""")
-
-
-def test_disable_hidden_frames():
-    class MyConfig(ConfigTest):
-        enable_hidden_frames = False
-
-    @pdb.hideframe
-    def g():
-        set_trace(Config=MyConfig)
-        return 'foo'
-    def fn():
-        g()
-        return 1
-
-    check(fn, """
-> .*g()
--> return 'foo'
-# c           # note that we were inside g()
-""")
-
-
 def test_break_on_setattr():
     # we don't use a class decorator to keep 2.5 compatibility
     class Foo(object):
@@ -981,21 +923,3 @@ def test_before_interaction_hook():
 HOOK!
 # c
 """)
-
-
-def test_unicode_bug():
-    def fn():
-        set_trace()
-        x = "this is plan ascii"
-        y = "this contains a unicode: à"
-        return
-
-    check(fn, """
-> .*fn()
--> x = "this is plan ascii"
-# n
-> .*fn()
--> y = "this contains a unicode:"
-# c
-""")
-    
